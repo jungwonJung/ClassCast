@@ -36,6 +36,14 @@
             android:name=".AddClassActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".VoteActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".HeadcountActivity"
+            android:exported="false" />
+
     </application>
 
 </manifest>

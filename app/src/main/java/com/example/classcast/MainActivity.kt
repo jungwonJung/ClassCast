@@ -31,7 +31,7 @@ class MainActivity : AppCompatActivity() {
 
         auth = FirebaseAuth.getInstance()
 
-        // 로그인 여부 확인 — 비로그인 시 LoginActivity로 이동
+        // Redirect to login if not signed in
         if (auth.currentUser == null) {
             goToLogin()
             return
@@ -39,27 +39,26 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
 
-        // Toolbar 설정
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
 
-        // View 초기화
         recyclerView = findViewById(R.id.recyclerView)
         emptyState = findViewById(R.id.emptyState)
 
         db = FirebaseFirestore.getInstance()
 
-        // Adapter 설정 (onDelete, onStatusToggle 콜백)
+        // Adapter with delete, status toggle, and headcount callbacks
         adapter = ClassAdapter(
             mutableListOf(),
             onDelete = { classItem -> showDeleteDialog(classItem) },
-            onStatusToggle = { classItem, isActive -> toggleStatus(classItem, isActive) }
+            onStatusToggle = { classItem, isActive -> toggleStatus(classItem, isActive) },
+            onHeadcount = { classItem -> openHeadcount(classItem) }
         )
 
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter
 
-        // FAB 클릭 시 AddClassActivity로 이동
+        // FAB opens AddClassActivity
         val fab = findViewById<FloatingActionButton>(R.id.fab)
         fab.setOnClickListener {
             startActivity(Intent(this, AddClassActivity::class.java))
@@ -69,13 +68,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Firestore에서 현재 유저의 수업 목록을 실시간으로 불러옴 (Snapshot Listener)
+     * Real-time Firestore listener — returns only the current user's classes.
      */
     private fun loadClasses() {
         val uid = auth.currentUser?.uid ?: return
 
         snapshotListener = db.collection("classes")
-            .whereEqualTo("ownerId", uid)   // 본인 수업만 필터링
+            .whereEqualTo("ownerId", uid)
             .addSnapshotListener { snapshots, error ->
                 if (error != null) return@addSnapshotListener
 
@@ -85,7 +84,7 @@ class MainActivity : AppCompatActivity() {
 
                 adapter.updateList(classList)
 
-                // Empty state 처리 (Extension 3)
+                // Extension 3: Empty state
                 if (classList.isEmpty()) {
                     recyclerView.visibility = View.GONE
                     emptyState.visibility = View.VISIBLE
@@ -97,12 +96,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 삭제 확인 다이얼로그 표시
+     * Confirmation dialog before deleting a class.
      */
     private fun showDeleteDialog(classItem: ClassItem) {
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.delete_class))
-            .setMessage("\"${classItem.courseName}\" 강의를 삭제하시겠습니까?")
+            .setMessage("Delete \"${classItem.courseName}\"?")
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 deleteClass(classItem)
             }
@@ -111,14 +110,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Firestore에서 수업 삭제
+     * Delete a class document from Firestore.
      */
     private fun deleteClass(classItem: ClassItem) {
         db.collection("classes").document(classItem.classId).delete()
     }
 
     /**
-     * 수업 상태 토글 (active ↔ inactive) — Extension 2: Status Toggle
+     * Toggle class status between active and inactive (Extension 2).
      */
     private fun toggleStatus(classItem: ClassItem, isActive: Boolean) {
         val newStatus = if (isActive) "active" else "inactive"
@@ -127,7 +126,19 @@ class MainActivity : AppCompatActivity() {
             .update("status", newStatus)
     }
 
-    // 상단 메뉴 (로그아웃)
+    /**
+     * Open the live headcount dashboard for the selected class.
+     */
+    private fun openHeadcount(classItem: ClassItem) {
+        val intent = Intent(this, HeadcountActivity::class.java).apply {
+            putExtra(HeadcountActivity.EXTRA_CLASS_ID, classItem.classId)
+            putExtra(HeadcountActivity.EXTRA_COURSE_NAME, classItem.courseName)
+            putExtra(HeadcountActivity.EXTRA_COURSE_CODE, classItem.courseCode)
+        }
+        startActivity(intent)
+    }
+
+    // Overflow menu: Student Vote + Logout
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
         return true
@@ -135,6 +146,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_student_vote -> {
+                startActivity(Intent(this, VoteActivity::class.java))
+                true
+            }
             R.id.action_logout -> {
                 auth.signOut()
                 goToLogin()
@@ -146,7 +161,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        snapshotListener?.remove()  // 메모리 누수 방지
+        snapshotListener?.remove() // Prevent memory leak
     }
 
     private fun goToLogin() {
